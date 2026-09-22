@@ -28,6 +28,70 @@ export function MusicProvider({ children }) {
     }
   }, [])
 
+  // ── musique présente dès l'arrivée ──
+  // 1) on tente une lecture automatique (certains navigateurs l'autorisent)
+  // 2) sinon on capture le TOUT PREMIER geste de Djamila sur la page
+  //    (clic, clavier, toucher — n'importe où) pour lancer la lecture en fondu.
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    let started = false
+    const attempt = () => {
+      if (started) return
+      started = true
+      audio.volume = 0
+      const p = audio.play()
+      if (p && typeof p.then === 'function') {
+        p.then(() => {
+          setReady(true)
+          setPlaying(true)
+          const fade = setInterval(() => {
+            if (!audioRef.current) return clearInterval(fade)
+            const next = Math.min(volume, audioRef.current.volume + 0.02)
+            audioRef.current.volume = next
+            if (next >= volume) clearInterval(fade)
+          }, 90)
+        }).catch(() => {})
+      } else {
+        setReady(true)
+        setPlaying(true)
+      }
+      cleanup()
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointerdown', attempt)
+      window.removeEventListener('keydown', attempt)
+      window.removeEventListener('touchstart', attempt)
+    }
+    window.addEventListener('pointerdown', attempt)
+    window.addEventListener('keydown', attempt)
+    window.addEventListener('touchstart', attempt, { passive: true })
+
+    // tentative automatique immédiate (propage la promesse vite si l'utilisateur
+    // a déjà interagi avec le site, via preload auto du navigateur)
+    audio.volume = 0
+    const p0 = audio.play()
+    if (p0 && typeof p0.then === 'function') {
+      p0.then(() => {
+        started = true
+        cleanup()
+        setReady(true)
+        setPlaying(true)
+        const fade = setInterval(() => {
+          if (!audioRef.current) return clearInterval(fade)
+          const next = Math.min(volume, audioRef.current.volume + 0.02)
+          audioRef.current.volume = next
+          if (next >= volume) clearInterval(fade)
+        }, 90)
+      }).catch(() => {})
+    }
+
+    return () => {
+      started = true
+      cleanup()
+    }
+  }, [volume])
+
   const play = () => {
     const audio = audioRef.current
     if (!audio) return
